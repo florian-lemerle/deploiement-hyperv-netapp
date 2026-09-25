@@ -1,0 +1,42 @@
+hyper_v:
+  hosts:
+    sitea-hv1:
+      ansible_host: 
+      hyperv_hostname:
+      hyperv_mgmt_ip:
+      hyperv_iscsi_1_ip:
+      hyperv_iscsi_2_ip:
+      hyperv_csv_ip:
+      hyperv_livemigration_ip:
+    sitea-hv2:
+      ansible_host: 
+      hyperv_hostname:
+      hyperv_mgmt_ip:
+      hyperv_iscsi_1_ip:
+      hyperv_iscsi_2_ip:
+      hyperv_csv_ip:
+      hyperv_livemigration_ip:
+    siteb-hv1:
+      ansible_host: 
+      hyperv_hostname:
+      hyperv_mgmt_ip:
+      hyperv_iscsi_1_ip:
+      hyperv_iscsi_2_ip:
+      hyperv_csv_ip:
+      hyperv_livemigration_ip:
+    siteb-hv2:
+      ansible_host: 
+      hyperv_hostname:
+      hyperv_mgmt_ip:
+      hyperv_iscsi_1_ip:
+      hyperv_iscsi_2_ip:
+      hyperv_csv_ip:
+      hyperv_livemigration_ip:
+  vars:
+    ansible_connection: psrp
+    ansible_psrp_auth: ntlm
+    ansible_psrp_port: 5986
+    ansible_psrp_protocol: https
+    ansible_psrp_cert_validation: ignore
+    ansible_user: svc_ansible
+    ansible_password: "Password1234$"
