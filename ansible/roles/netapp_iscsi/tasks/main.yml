@@ -1,0 +1,45 @@
+---
+- name: Configure netapp ISCSI
+  module_defaults:
+    group/netapp.ontap.netapp_ontap:
+      hostname: "{{netapp_cluster_mgmt_ip}}"
+      username: "{{netapp_cluster_user}}"
+      password: "{{netapp_cluster_password}}"
+      validate_certs: false
+  block:
+    - name: Create broadcast domain for ISCSI1
+      netapp.ontap.na_ontap_broadcast_domain:
+        state: present
+        name: ISCSI1
+        ports: "{{netapp_iscsi1_ports}}"
+        mtu: "{{netapp_iscsi_mtu}}"
+        ipspace: "{{netapp_iscsi_ipspace}}"
+      tags: "create_broadcast_domains"
+
+    - name: Create broadcast domain for ISCSI2
+      netapp.ontap.na_ontap_broadcast_domain:
+        state: present
+        name: ISCSI2
+        ports: "{{netapp_iscsi2_ports}}"
+        mtu: "{{netapp_iscsi_mtu}}"
+        ipspace: "{{netapp_iscsi_ipspace}}"
+      tags: "create_broadcast_domains"
+
+    - name: Create ISCSI lifs
+      netapp.ontap.na_ontap_interface:
+        state: present
+        interface_name: "{{item.value.name}}"
+        home_node: "{{item.value.node}}"
+        home_port: "{{item.value.port}}"
+        address: "{{item.value.ip}}"
+        netmask: "{{netapp_iscsi_netmask}}"
+        admin_status: up
+        failover_scope: "home_port_only"
+        service_policy: default-data-blocks
+        vserver: "{{netapp_iscsi_vserver}}"
+        ipspace: "{{netapp_iscsi_ipspace}}"
+        interface_type: ip
+      loop: "{{netapp_iscsi_lifs | dict2items}}"
+      loop_control:
+        label: "{{item.key}}"
+      tags: "create_iscsi_lifs"

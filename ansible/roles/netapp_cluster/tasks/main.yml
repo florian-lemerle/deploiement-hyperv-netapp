@@ -1,0 +1,103 @@
+---
+- name: Configure netapp Array
+  module_defaults:
+    group/netapp.ontap.netapp_ontap:
+      hostname: "{{netapp_cluster_mgmt_ip}}"
+      username: "{{netapp_cluster_user}}"
+      password: "{{netapp_cluster_password}}"
+      validate_certs: false
+  block:
+    - name: Rename first node
+      netapp.ontap.na_ontap_node:
+        from_name: "{{netapp_cluster_name}}-01"   
+        name: "{{netapp_cluster_node1_name}}"
+        location: "{{netapp_cluster_location}}"
+      tags: "rename_nodes"
+
+    - name: Rename second node
+      netapp.ontap.na_ontap_node:
+        from_name: "{{netapp_cluster_name}}-02"   
+        name: "{{netapp_cluster_node2_name}}"
+        location: "{{netapp_cluster_location}}"
+      tags: "rename_nodes"
+
+    - name: Rename management lif on first node
+      netapp.ontap.na_ontap_interface:
+        from_name: "{{netapp_cluster_name}}-01_mgmt1"
+        interface_name: "{{netapp_cluster_node1_name}}_mgmt"
+      tags: "rename_mgmt_lifs"
+
+    - name: Rename management lif on second node
+      netapp.ontap.na_ontap_interface:
+        from_name: "{{netapp_cluster_name}}-02_mgmt1"
+        interface_name: "{{netapp_cluster_node2_name}}_mgmt"
+      tags: "rename_mgmt_lifs"
+
+    - name: Rename cluster lif 1 on first node
+      netapp.ontap.na_ontap_interface:
+        from_name: "{{netapp_cluster_name}}-01_clus1"
+        interface_name: "{{netapp_cluster_node1_name}}_clus1"
+        ipspace: Cluster
+      tags: "rename_cluster_lifs"
+
+    - name: Rename cluster lif 2 on first node
+      netapp.ontap.na_ontap_interface:
+        from_name: "{{netapp_cluster_name}}-01_clus2"
+        interface_name: "{{netapp_cluster_node1_name}}_clus2"
+        ipspace: Cluster
+      tags: "rename_cluster_lifs"
+      
+    - name: Rename cluster lif 1 on second node
+      netapp.ontap.na_ontap_interface:
+        from_name: "{{netapp_cluster_name}}-02_clus1"
+        interface_name: "{{netapp_cluster_node2_name}}_clus1"
+        ipspace: Cluster
+      tags: "rename_cluster_lifs"
+
+    - name: Rename cluster lif 2 on second node
+      netapp.ontap.na_ontap_interface:
+        from_name: "{{netapp_cluster_name}}-02_clus2"
+        interface_name: "{{netapp_cluster_node2_name}}_clus2"
+        ipspace: Cluster
+      tags: "rename_cluster_lifs"
+
+    - name: Configure DNS
+      netapp.ontap.na_ontap_dns:
+        state: present
+        domains: "{{netapp_cluster_dns_domains}}"
+        nameservers: "{{netapp_cluster_dns_servers}}"
+        vserver: "{{netapp_cluster_name}}"
+        skip_validation: true
+      tags: "configure_general_settings"
+    
+    - name: Configure NTP servers
+      netapp.ontap.na_ontap_ntp:
+        state: present
+        server_name: "{{netapp_cluster_ntp_server}}"
+      tags: "configure_general_settings"
+    
+    - name: Configure service-processors
+      netapp.ontap.na_ontap_service_processor_network:
+        state: present
+        node: "{{item.value.node}}"
+        address_type: ipv4
+        is_enabled: true
+        dhcp: none 
+        ip_address: "{{item.value.sp_ip}}"
+        netmask: "{{netapp_cluster_mgmt_netmask}}"
+        gateway_ip_adress: "{{netapp_cluster_mgmt_gateway}}"
+        wait_for_completion: true
+      loop: "{{netapp_cluster_sp | dict2items}}"
+      loop_control:
+        label: "{{item.key}}"
+      tags: "configure_sp"
+
+    - name: Disable unused ports
+      netapp.ontap.na_ontap_net_port:
+        node: "{{item}}"
+        ports: "{{netapp_cluster_unused_ports}}"
+        up_admin: false
+      loop:
+        - "{{netapp_cluster_node1_name}}"
+        - "{{netapp_cluster_node2_name}}"
+      tags: "disable_unused_ports"
