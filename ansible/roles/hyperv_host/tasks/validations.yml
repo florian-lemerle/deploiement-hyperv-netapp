@@ -1,0 +1,79 @@
+---
+- name: Ping ISCSI1 targets
+  ansible.windows.win_shell: |
+    $result = ping -S "{{ hyperv_iscsi1_ip }}" -f -l 8972 "{{ item }}" -w 500
+    $result | Write-Output
+
+    if ($LASTEXITCODE -ne 0 -or $result -match "Lost = [1-4]" -or $result -match "100% loss" -or $result -match "Destination host unreachable" -or $result -match "Request timed out") {
+      Write-Error "Ping failed for {{ item }}"
+      exit 1
+    }
+  loop:
+    - "{{ hyperv_iscsi1_target1_ip }}"
+    - "{{ hyperv_iscsi1_target2_ip }}"
+    - "{{ hyperv_iscsi1_target3_ip }}"
+    - "{{ hyperv_iscsi1_target4_ip }}"
+  register: iscsi1_ping
+  changed_when: false
+  ignore_errors: true
+  tags: "ping_iscsi1"
+
+- name: Ping ISCSI2 targets
+  ansible.windows.win_shell: |
+    $result = ping -S "{{ hyperv_iscsi2_ip }}" -f -l 8972 "{{ item }}" -w 500
+    $result | Write-Output
+
+    if ($LASTEXITCODE -ne 0 -or $result -match "Lost = [1-4]" -or $result -match "100% loss" -or $result -match "Destination host unreachable" -or $result -match "Request timed out") {
+      Write-Error "Ping failed for {{ item }}"
+      exit 1
+    }
+  loop:
+    - "{{ hyperv_iscsi2_target1_ip }}"
+    - "{{ hyperv_iscsi2_target2_ip }}"
+    - "{{ hyperv_iscsi2_target3_ip }}"
+    - "{{ hyperv_iscsi2_target4_ip }}"
+  register: iscsi2_ping
+  changed_when: false
+  ignore_errors: true
+  tags: "ping_iscsi2"
+
+
+- name: Ping hyper_v CSV
+  ansible.windows.win_shell: |
+    $targetIp = "{{ hostvars[item]['hyperv_csv_ip'] }}"
+    $result = ping -S "{{ hyperv_csv_ip }}" $targetIp -w 500
+    $result | Write-Output
+
+    if ($LASTEXITCODE -ne 0 -or $result -match "Lost = [1-4]" -or $result -match "100% loss" -or $result -match "Destination host unreachable" -or $result -match "Request timed out") {
+      Write-Error "Ping failed for {{ item }}"
+      exit 1
+    }
+  loop: "{{ groups['hyper_v'] }}"
+  register: csv_ping
+  changed_when: false
+  ignore_errors: true
+  tags: "ping_csv"
+
+- name: Display ISCSI1 pings results
+  ansible.builtin.debug:
+    msg: "Ping to {{ item.item }} status: {{ 'SUCCESS' if item.rc == 0 else 'FAILED' }}"
+  loop: "{{ iscsi1_ping.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  tags: "output_iscsi1_ping_results"
+
+- name: Display ISCSI2 pings results
+  ansible.builtin.debug:
+    msg: "Ping to {{ item.item }} status: {{ 'SUCCESS' if item.rc == 0 else 'FAILED' }}"
+  loop: "{{ iscsi2_ping.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  tags: "output_iscsi2_ping_results"
+
+- name: Display CSV pings
+  ansible.builtin.debug:
+    msg: "Ping to {{ item.item }} status: {{ 'SUCCESS' if item.rc == 0 else 'FAILED' }}"
+  loop: "{{ csv_ping.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  tags: "output_csv_ping_results"

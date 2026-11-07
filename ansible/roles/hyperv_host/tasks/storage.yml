@@ -1,0 +1,79 @@
+---
+- name: Start and enable MSiSCSI service
+  ansible.windows.win_service:
+    name: MSiSCSI
+    start_mode: auto
+    state: started
+
+- name: Create ISCSI target portals
+  ansible.windows.win_powershell:
+    parameters:
+      Portals: "{{hyperv_iscsi_portals}}"
+    script: |
+      param(
+        [array]$Portals
+      )
+      $changed = $false
+
+      foreach ($portal in $Portals) {
+        $targetIp = $portal.target
+        $initiatorIp = $portal.initiator
+
+        $existingPortal = Get-IscsiTargetPortal -TargetPortalAddress $targetIp -ErrorAction SilentlyContinue
+        if (-not $existingPortal) {
+          New-IscsiTargetPortal -TargetPortalAddress $targetIp -TargetPortalPortNumber 3260 -InitiatorPortalAddress $initiatorIp -ErrorAction Continue
+          $changed = $true
+        }
+      }
+      $Ansible.Changed = $changed
+  tags: "create_iscsi_target_portals"
+
+- name: Connect ISCSI target portals
+  ansible.windows.win_powershell:
+    parameters:
+      Portals: "{{hyperv_iscsi_portals}}"
+    script: |
+      param(
+        [array]$Portals
+      )
+      $changed = $false
+
+      foreach ($portal in $Portals) {
+        $targetIp = $portal.target
+        $initiatorIp = $portal.initiator
+
+        $existingPortalConnection = Get-IscsiConnection | Where-Object TargetAddress -eq $targetIp -ErrorAction SilentlyContinue
+        if (-not $existingPortalConnection) {
+          Get-IscsiTarget | Connect-IscsiTarget -IsMultipathEnabled $true -TargetPortalAddress $targetIp -InitiatorPortalAddress $initiatorIp -IsPersistent $true -ErrorAction Continue
+          $changed = $true
+        }
+      }
+      $Ansible.Changed = $changed
+  tags: "connect_iscsi_target_portals"
+
+- name: Set MPIO Round Robin
+  ansible.windows.win_powershell:
+    script: |
+      $Ansible.Changed = $false
+      $mpio_policy = Get-MSDSMGlobalDefaultLoadBalancePolicy
+      if ($mpio_policy -ne "RR") {
+        Set-MSDSMGlobalDefaultLoadBalancePolicy -Policy RR 
+        $Ansible.Changed = $true
+      }
+  tags: "set_mpio_settings"
+
+- name: Add MPIO support on SCSI
+  ansible.windows.win_powershell:
+    script: |
+      $Ansible.Changed = $false
+      $iscsi_claim = (Get-MSDSMAutomaticClaimSettings).iSCSI
+      if (!$iscsi_claim){
+        Enable-MSDSMAutomaticClaim -BusType iSCSI
+        $Ansible.Changed = $true
+      }
+  register: r_mpio_scsi
+  tags: "set_mpio_settings"
+  
+- name: Reboot if mpio requires it
+  ansible.windows.win_reboot
+  when: r_mpio_scsi.reboot_required

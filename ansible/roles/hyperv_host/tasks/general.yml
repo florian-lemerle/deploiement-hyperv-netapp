@@ -1,0 +1,34 @@
+---
+- name: Rename host
+  ansible.windows.win_hostname:
+    name: "{{ hyperv_hostname }}"
+  register: r_hostname
+
+- name: Configure timezone to Paris
+  ansible.windows.win_timezone:
+    timezone: Romance Standard time
+
+- name: Install roles
+  ansible.windows.win_feature:
+    state: present
+    name:
+      - Hyper-v
+      - Multipath-IO
+      - Failover-Clustering
+    include_management_tools: true
+    include_sub_features: true
+  register: r_features
+
+- name: Reboot if required
+  ansible.windows.win_reboot
+  when: r_hostname.reboot_required or r_features.reboot_required
+
+- name: Configure maximum parallel live migrations
+  ansible.windows.win_powershell:
+    script: |
+      $vmHostSettings = Get-VMHost -ComputerName localhost 
+      if (-not ($vmHostSettings.MaximumVirtualMachineMigrations -eq {{hyperv_settings_lm_max}} )) {
+        Set-VMHost -ComputerName localhost -MaximumVirtualMachineMigrations {{hyperv_settings_lm_max}}
+      }
+      else { $Ansible.Changed = $false }
+  tags: "configure_hyperv_settings"

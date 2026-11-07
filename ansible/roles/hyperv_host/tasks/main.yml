@@ -1,0 +1,16 @@
+---
+- name: Configure base Hyper-V host
+  ansible.builtin.import_tasks: general.yml
+  tags: "configure_base"
+
+- name: Configure network Hyper-V
+  ansible.builtin.import_tasks: network.yml
+  tags: "configure_netwwork"
+
+- name: Configure ISCSI storage Hyper-V
+  ansible.builtin.import_tasks: storage.yml
+  tags: "configure_storage"
+
+- name: Tests networks
+  ansible.builtin.import_tasks: validations.yml
+  tags: "validations"

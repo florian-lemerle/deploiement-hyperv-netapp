@@ -1,0 +1,183 @@
+---
+- name: Configure ISCSI1 ip
+  ansible.windows.win_powershell:
+    if (-not (Get-NetIPAddress -InterfaceAlias "ISCSI1" -IPAddress "{{hyperv_iscsi1_ip}}" -ErrorAction SilentlyContinue)) {
+        New-NetIPAddress -IPAddress "{{hyperv_iscsi1_ip}}" -PrefixLength {{hyperv_iscsi1_msk}} -InterfaceAlias "ISCSI1"
+      }
+      else {
+        $Ansible.Changed = $false
+      }
+  tags: "configure_iscsi1"
+
+- name: Configure ISCSI2 ip
+  ansible.windows.win_powershell:
+    script: |
+      if (-not (Get-NetIPAddress -InterfaceAlias "ISCSI2" -IPAddress "{{hyperv_iscsi2_ip}}" -ErrorAction SilentlyContinue)) {
+        New-NetIPAddress -IPAddress "{{hyperv_iscsi2_ip}}" -PrefixLength {{hyperv_iscsi2_msk}} -InterfaceAlias "ISCSI2"
+      }
+      else {
+        $Ansible.Changed = $false
+      }
+  tags: "configure_iscsi2"
+
+- name: Set jumbo packets on ISCSI1 and ISCSI2 Interface
+  ansible.windows.win_powershell:
+    script: |
+      if (-not (Get-NetIPInterface -InterfaceAlias "ISCSI1" -NlMtuBytes 9000)){
+        Set-NetIPInterface -InterfaceAlias "ISCSI1" -NlMtuBytes 9000
+        Set-NetAdapterAdvancedProperty -Name “ISCSI1” -RegistryKeyword “*JumboPacket” -Registryvalue 9014
+      }
+      else {
+        $Ansible.Changed = $false
+      }
+      if (-not (Get-NetIPInterface -InterfaceAlias "ISCSI2" -NlMtuBytes 9000)){
+        Set-NetIPInterface -InterfaceAlias "ISCSI2" -NlMtuBytes 9000
+        Set-NetAdapterAdvancedProperty -Name “ISCSI2” -RegistryKeyword “*JumboPacket” -Registryvalue 9014
+      }
+      else {
+        $Ansible.Changed = $false
+      }
+  when: hyperv_iscsi_jumbo
+
+- name: Create SET Switch
+  ansible.windows.win_powershell:
+    parameters:
+      AdapterNames: "{{hyperv_set_switch_adapter_names}}"
+    script: |
+      param(
+        [string[]]$AdapterNames
+      )
+      if (-not (Get-VMSwitch -Name "SET-Switch" -ErrorAction SilentlyContinue)) {
+        New-VMSwitch -Name "SET-Switch" -NetAdapterName $AdapterNames -EnableEmbeddedTeaming $true
+        Set-VMSwitchTeam -LoadBalancingAlgorithm Dynamic -SwitchName "SET-Switch"
+        Get-VMNetworkAdapter -ManagementOS -Name "SET-Switch" | Rename-VMNetworkAdapter -NewName "Management"
+      }
+      else {
+        $Ansible.Changed = $false
+      }
+  tags: "create_set_switch"
+
+- name: Create management vEthernet and set vlan
+  ansible.windows.win_powershell:
+    script: |
+      if (-not (Get-VMNetworkAdapter -ManagementOS -name "Management" -ErrorAction SilentlyContinue)) {
+        Add-VMNetworkAdapter -ManagementOS -Name "Management" -SwitchName "SET-Switch"
+        Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName "Management" -Untagged
+      }
+      else {
+        $Ansible.Changed = $false
+      }
+  tags: "create_management_interface"
+
+- name: Create LiveMigration vEthernet and set vlan
+  ansible.windows.win_powershell:
+    script: |
+      if (-not (Get-VMNetworkAdapter -ManagementOS -name "LiveMigration" -ErrorAction SilentlyContinue)) {
+        Add-VMNetworkAdapter -ManagementOS -Name "LiveMigration" -SwitchName "SET-Switch"
+        Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName "LiveMigration" -Access -VlanId "{{hyperv_lm_vlan_id}}"
+      }
+      else {
+        $Ansible.Changed = $false
+      }
+
+- name: Create CSV vEthernet and set vlan
+  ansible.windows.win_powershell:
+    script: |
+      if (-not (Get-VMNetworkAdapter -ManagementOS -name "CSV" -ErrorAction SilentlyContinue)) {
+        Add-VMNetworkAdapter -ManagementOS -Name "CSV" -SwitchName "SET-Switch"
+        Set-VMNetworkAdapterVlan -ManagementOS -VMNetworkAdapterName "CSV" -Access -VlanId "{{hyperv_csv_vlan_id}}"
+      }
+      else {
+        $Ansible.Changed = $false
+      }
+
+- name: Set management ip
+  ansible.windows.win_powershell:
+    script: |
+      $params1 = @{
+        'InterfaceAlias' = "vEthernet (Management)"
+        'IPAddress' = "{{ hyperv_mgmt_ip }}"
+        'ErrorAction' = "SilentlyContinue"
+      }
+      $params2 = @{
+        'IPAddress' = "{{hyperv_mgmt_ip}}"
+        'PrefixLength' = {{hyperv_mgmt_msk}}
+        'DefaultGateway' = "{{hyperv_mgmt_gtw}}"
+      }
+      if (-not (Get-NetIPAddress @params1)) {
+        New-NetIPAddress @params2 -InterfaceAlias "vEthernet (Management)"
+      }
+      else {
+        $Ansible.Changed = $false
+      }
+
+- name: Set LiveMigration ip
+  ansible.windows.win_powershell:
+    script: |
+      $params1 = @{
+        'InterfaceAlias' = "vEthernet (LiveMigration)"
+        'IPAddress' = "{{ hyperv_lm_ip }}"
+        'ErrorAction' = "SilentlyContinue"
+      }
+      $params2 = @{
+        'IPAddress' = "{{hyperv_lm_ip}}"
+        'PrefixLength' = {{hyperv_lm_msk}}
+      }
+      if (-not (Get-NetIPAddress @params1)) {
+        New-NetIPAddress @params2 -InterfaceAlias "vEthernet (LiveMigration)"
+      }
+      else {
+        $Ansible.Changed = $false
+      }
+
+- name: Set CSV ip
+  ansible.windows.win_powershell:
+    script: |
+      $params1 = @{
+        'InterfaceAlias' = "vEthernet (CSV)"
+        'IPAddress' = "{{ hyperv_csv_ip }}"
+        'ErrorAction' = "SilentlyContinue"
+      }
+      $params2 = @{
+        'IPAddress' = "{{hyperv_csv_ip}}"
+        'PrefixLength' = {{hyperv_csv_msk}}
+      }
+      if (-not (Get-NetIPAddress @params1)) {
+        New-NetIPAddress @params2 -InterfaceAlias "vEthernet (CSV)"
+      }
+      else {
+        $Ansible.Changed = $false
+      }
+
+- name: Set DNS servers
+  ansible.windows.win_dns_client:
+    adapter_names: "vEthernet (Management)"
+    dns_servers: "{{hyperv_dns_servers}}"
+
+- name: Disable DNS registration except for management interface
+  ansible.windows.win_powershell:
+    script: |
+      $Ansible.Changed = $false
+
+      Get-NetAdapter | Where-Object { $_.Name -ne "vEthernet (Management)" } | ForEach-Object {
+        $dnsClientConfig = Get-DnsClient -InterfaceIndex $_.ifIndex
+        if ($dnsConfig.RegisterThisConnectionsAddress) {
+          Set-DnsClient -InterfaceIndex $_.ifIndex -RegisterThisConnectionsAddress $False -ErrorAction SilentlyContinue
+          $Ansible.Changed = $true
+        }
+      }
+      Get-NetAdapter -Name "vEthernet (Management)" | Set-DnsClient -RegisterThisConnectionsAddress $true
+
+- name: Remove NDIS from Vswitches
+  ansible.windows.win_powershell:
+    script: |
+      $Ansible.Changed = $false
+      $vmSwitches = Get-VMSwitch
+      foreach ($vmswitch in $vmSwitches) { 
+        $ndisSettings = get-vmswitchExtension -vmswitchName $vmswitch.Name -name "Microsoft NDIS Capture"
+        if ($ndisSettings.Enabled){
+          Disable-VMSwitchExtension -Name "Microsoft NDIS Capture" -VMSwitchName $vmswitch.Name
+          $Ansible.Changed = $true
+        }
+      }
+  tags: "remove_ndis_vswitch"
